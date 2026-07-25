@@ -58,6 +58,18 @@ Por padrão testa **TODOS os parâmetros** de cada alvo: cada parâmetro vira um
 
 ## Instalação
 
+**Installer (recomendado)** — cria um venv isolado, instala as dependências e
+disponibiliza o comando `paramhunter` no PATH (não copia `tests/` nem outputs):
+
+```bash
+./install.sh                 # instala (venv + comando paramhunter)
+./install.sh --with-tools    # + tenta instalar gau/paramspider/chromium
+./install.sh uninstall       # remove
+```
+Como root instala em `/opt/paramhunter` + `/usr/local/bin`; sem root, em
+`~/.local`. Prefixo custom: `./install.sh --prefix ~/apps/ph`.
+
+**Manual:**
 ```bash
 pip install -r requirements.txt        # httpx, aiohttp, PyYAML
 ```
