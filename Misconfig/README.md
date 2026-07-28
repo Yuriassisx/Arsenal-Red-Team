@@ -13,6 +13,10 @@ com um comando `curl` de reprodução em todo achado acionável e um resumo exec
 > código-fonte de leitura/cópia direta, mas roda de forma **idêntica** ao
 > original (mesma CLI, mesmo comportamento). Requer **Python 3.13.x** (o
 > bytecode é específico da versão).
+>
+> **Motivo da ofuscação:** este arquivo contém lógica de detecção e técnicas
+> de bypass **privadas e autorais**, desenvolvidas por mim — a ofuscação evita
+> cópia/reuso direto do código sem impedir o uso normal da ferramenta.
 
 ---
 

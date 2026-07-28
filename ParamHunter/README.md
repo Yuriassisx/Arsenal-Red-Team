@@ -18,6 +18,10 @@ precisão** (pouco falso-positivo) via confirmação estatística e oráculos.
 > original (mesma CLI, mesmo comportamento). Requer **Python 3.13.x** (o
 > bytecode é específico da versão). O restante do projeto (`core/`,
 > `encoders/`, `modules/`, `payloads/`) permanece em texto claro.
+>
+> **Motivo da ofuscação:** este arquivo contém lógica de detecção e técnicas
+> de bypass **privadas e autorais**, desenvolvidas por mim — a ofuscação evita
+> cópia/reuso direto do código sem impedir o uso normal da ferramenta.
 
 ---
 
