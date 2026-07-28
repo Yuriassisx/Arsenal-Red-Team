@@ -1,0 +1,19 @@
+# ============================================================================
+# Dependencias do misconfig.py
+# Instalar:  pip install -r requirements.txt
+#
+# APENAS 'requests' e obrigatorio. 'dnspython' e 'cryptography' sao OPCIONAIS:
+# a ferramenta funciona sem eles, apenas desativando os modulos correspondentes.
+#   - dnspython    -> recon de DNS: CNAME, SPF/DMARC, transferencia de zona (AXFR),
+#                     brute-force/permutacao de subdominios, subdomain takeover
+#   - cryptography -> analise de certificado TLS: validade, self-signed, SAN
+#
+# Todo o resto usado pelo script e biblioteca padrao do Python (nao precisa instalar):
+#   argparse, base64, concurrent.futures, getpass, hashlib, hmac, html, json, os,
+#   random, re, socket, ssl, string, sys, threading, time, datetime, http.cookiejar,
+#   urllib.parse
+# ============================================================================
+
+requests>=2.25          # cliente HTTP (OBRIGATORIO); traz urllib3 junto
+dnspython>=2.1          # OPCIONAL: modulos de DNS / subdominios
+cryptography>=3.4       # OPCIONAL: parsing de certificado TLS

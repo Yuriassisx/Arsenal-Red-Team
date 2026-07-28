@@ -1,0 +1,55 @@
+name: deserial
+description: Deserialização insegura (Java/PHP/.NET/Python/Ruby/Node) — error/OOB
+detectors: [signature, diff]
+diff_len_ratio: 0.40
+
+transforms:
+  - raw
+  - url
+  - base64
+
+signatures:
+  # Java
+  - "java\\.io\\.InvalidClassException"
+  - "java\\.lang\\.ClassNotFoundException"
+  - "java\\.io\\.StreamCorruptedException"
+  - "invalid stream header"
+  - "ObjectInputStream|readObject"
+  - "java\\.io\\.OptionalDataException"
+  # PHP
+  - "unserialize\\(\\)"
+  - "__PHP_Incomplete_Class"
+  - "Error at offset \\d+ of \\d+ bytes"
+  - "Note: Unknown class"
+  # .NET
+  - "System\\.Runtime\\.Serialization"
+  - "BinaryFormatter|SoapFormatter"
+  - "SerializationException"
+  - "TypeLoadException"
+  # Python
+  - "_?pickle|UnpicklingError"
+  - "insecure string pickle"
+  - "STACK_GLOBAL|cPickle"
+  # Ruby / Node
+  - "marshal data too short|Marshal\\.load"
+  - "_\\$\\$ND_FUNC\\$\\$_|node-serialize"
+
+payloads:
+  # Java ObjectInputStream magic (\xac\xed\x00\x05) em base64 = rO0AB...
+  - { value: "rO0ABXNy", tags: [java, magic] }
+  - { value: "rO0ABXQABGFiY2Q=", tags: [java, magic] }
+  - { value: "\xac\xed\x00\x05", tags: [java, raw] }
+  # PHP unserialize
+  - { value: 'O:8:"stdClass":0:{}', tags: [php] }
+  - { value: 'a:1:{i:0;s:3:"abc";}', tags: [php] }
+  - { value: 'O:1:"A":1:{s:1:"x";s:3:"abc";}', tags: [php] }
+  - { value: 'O:+8:"stdClass":0:{}', tags: [php, malformed] }
+  # .NET BinaryFormatter marker (AAEAAAD/////)
+  - { value: "AAEAAAD/////AQAAAAAAAAAM", tags: [dotnet] }
+  # Python pickle (base64 protocol 4/5 header gASV / \x80\x04)
+  - { value: "gASVCgAAAAAAAACMBnBvc25lcpaC", tags: [python, pickle] }
+  - { value: "\x80\x04\x95", tags: [python, raw] }
+  # Ruby Marshal (base64 BAh)
+  - { value: "BAhbBg==", tags: [ruby, marshal] }
+  # Node node-serialize
+  - { value: '{"rce":"_$$ND_FUNC$$_function(){return 1}()"}', tags: [node] }

