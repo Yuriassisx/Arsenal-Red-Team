@@ -23,6 +23,20 @@ precisão** (pouco falso-positivo) via confirmação estatística e oráculos.
 > de bypass **privadas e autorais**, desenvolvidas por mim — a ofuscação evita
 > cópia/reuso direto do código sem impedir o uso normal da ferramenta.
 
+## Licenciamento
+
+Toda instalação nova tem **3 dias de avaliação gratuita**, contados a partir do
+primeiro uso. Depois disso, é necessário ativar uma chave de licença.
+
+```bash
+python3 paramhunter.py --license-status          # ve quanto tempo resta
+python3 paramhunter.py --activate SUA-CHAVE-AQUI # ativa uma licenca
+```
+
+Planos disponíveis: **1 mês**, **6 meses** e **1 ano**. Para adquirir uma
+chave, entre em contato com o autor. As chaves são assinadas digitalmente
+(Ed25519) — não é possível gerar chaves válidas sem autorização do autor.
+
 ---
 
 ## Índice
