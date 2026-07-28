@@ -12,6 +12,13 @@ precisão** (pouco falso-positivo) via confirmação estatística e oráculos.
 **Números:** 12 módulos de vulnerabilidade · 9 técnicas dedicadas · ~510 payloads ·
 58 encoders de bypass · 10 perfis de evasão por fabricante de WAF · v1.1.0.
 
+> **Sobre o `paramhunter.py` deste repositório:** é um **build ofuscado**
+> (bytecode compilado + comprimido + empacotado num stub carregador) — protege
+> o código-fonte de leitura/cópia direta, mas roda de forma **idêntica** ao
+> original (mesma CLI, mesmo comportamento). Requer **Python 3.13.x** (o
+> bytecode é específico da versão). O restante do projeto (`core/`,
+> `encoders/`, `modules/`, `payloads/`) permanece em texto claro.
+
 ---
 
 ## Índice

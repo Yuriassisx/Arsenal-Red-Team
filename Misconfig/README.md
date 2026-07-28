@@ -8,6 +8,12 @@ arquivo Python.**
 Feito para **pentest e bug bounty autorizados**. Saída em português, colorida por criticidade,
 com um comando `curl` de reprodução em todo achado acionável e um resumo executivo no final.
 
+> **Sobre o `misconfig.py` deste repositório:** é um **build ofuscado** (bytecode
+> compilado + comprimido + empacotado num stub carregador) — protege o
+> código-fonte de leitura/cópia direta, mas roda de forma **idêntica** ao
+> original (mesma CLI, mesmo comportamento). Requer **Python 3.13.x** (o
+> bytecode é específico da versão).
+
 ---
 
 > ## ⚠️ AVISO LEGAL — LEIA ANTES DE USAR
